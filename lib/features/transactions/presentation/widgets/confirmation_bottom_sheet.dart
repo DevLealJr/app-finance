@@ -2,7 +2,14 @@ import 'package:finance/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class ConfirmationBottomSheet extends StatelessWidget {
-  const ConfirmationBottomSheet({super.key});
+  const ConfirmationBottomSheet({
+    super.key,
+    required this.valorParcela,
+    required this.valorTotal,
+  });
+
+  final double valorParcela;
+  final double valorTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -17,44 +24,43 @@ class ConfirmationBottomSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Deseja somar ao último valor?',
+            'Lançamento salvo',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            'Detectamos um lançamento recente de mesmo valor e categoria.',
+            'A despesa foi registrada no seu controle financeiro.',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 32),
-          _buildRow('Total Atual', 'R\$ 4.287,50'),
+          _buildRow('Valor total', _formatarMoeda(valorTotal)),
           const SizedBox(height: 12),
-          _buildRow('+ Novo Lançamento', 'R\$ 150,00', valueColor: AppTheme.primaryColor),
+          _buildRow(
+            'Valor da parcela',
+            _formatarMoeda(valorParcela),
+            valueColor: AppTheme.primaryColor,
+          ),
           const Divider(height: 32, color: Colors.white10),
-          _buildRow('Novo Total Planejado', 'R\$ 4.437,50', isBold: true),
+          _buildRow('Status', 'Confirmado', isBold: true),
           const SizedBox(height: 32),
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Confirmar'),
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Concluir'),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRow(String label, String value, {Color? valueColor, bool isBold = false}) {
+  Widget _buildRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -69,5 +75,9 @@ class ConfirmationBottomSheet extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatarMoeda(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 }

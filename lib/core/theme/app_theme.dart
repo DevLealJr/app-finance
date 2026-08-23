@@ -15,9 +15,21 @@ class AppTheme {
       primaryColor: primaryColor,
       cardColor: surfaceColor,
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: textPrimary, fontSize: 32, fontWeight: FontWeight.bold),
-        headlineMedium: TextStyle(color: textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
-        titleLarge: TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
+        headlineLarge: TextStyle(
+          color: textPrimary,
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+        ),
+        headlineMedium: TextStyle(
+          color: textPrimary,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+        titleLarge: TextStyle(
+          color: textPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
         bodyLarge: TextStyle(color: textPrimary, fontSize: 16),
         bodyMedium: TextStyle(color: textSecondary, fontSize: 14),
       ),
@@ -30,7 +42,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: backgroundColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
