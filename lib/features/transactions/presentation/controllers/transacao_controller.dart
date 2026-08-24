@@ -1,7 +1,11 @@
 // lib/controllers/transacao_controller.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:finance/features/transactions/data/models/transacao_model.dart';
+import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
 import 'package:finance/features/transactions/data/repositories/transacao_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 double calcularValorDaParcela(double valorTotal, int totalParcelas) {
   if (totalParcelas < 1) {
@@ -37,6 +41,7 @@ class TransacaoController extends ChangeNotifier {
   double totalDebito = 0.0;
   double totalPix = 0.0;
   double totalComprometidoFuturo = 0.0;
+  List<GastoFixoModel> gastosFixos = [];
 
   String filtroMetodoAtual = 'Todos';
   String filtroPeriodoAtual = 'Mês';
@@ -55,6 +60,38 @@ class TransacaoController extends ChangeNotifier {
 
   // 2. Garante que o Flutter espere o banco existir na memória antes de ler os dados
   Future<void> _inicializarController() async {
+    await _carregarGastosFixos();
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> _carregarGastosFixos() async {
+    final prefs = await SharedPreferences.getInstance();
+    final salvos = prefs.getStringList('gastos_fixos') ?? [];
+    gastosFixos = salvos
+        .map(
+          (item) =>
+              GastoFixoModel.fromMap(jsonDecode(item) as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<void> adicionarGastoFixo({
+    required String descricao,
+    required double valor,
+  }) async {
+    gastosFixos = [
+      ...gastosFixos,
+      GastoFixoModel(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        descricao: descricao,
+        valor: valor,
+      ),
+    ];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      'gastos_fixos',
+      gastosFixos.map((gasto) => jsonEncode(gasto.toMap())).toList(),
+    );
     await atualizarDashboardEHistorico();
   }
 
@@ -76,7 +113,13 @@ class TransacaoController extends ChangeNotifier {
     }
 
     // Cálculos para o painel principal
-    totalGastoMes = doMes.fold(0.0, (soma, item) => soma + item.valorParcela);
+    final totalGastosFixos = gastosFixos.fold(
+      0.0,
+      (soma, gasto) => soma + gasto.valor,
+    );
+    totalGastoMes =
+        doMes.fold(0.0, (soma, item) => soma + item.valorParcela) +
+        totalGastosFixos;
     totalCredito = doMes
         .where((t) => t.metodoPagamento == 'Crédito')
         .fold(0.0, (s, item) => s + item.valorParcela);
@@ -93,6 +136,7 @@ class TransacaoController extends ChangeNotifier {
               item.data.isAfter(referencia.subtract(const Duration(days: 1))),
         )
         .fold(0.0, (soma, item) => soma + item.valorParcela);
+    totalComprometidoFuturo += totalGastosFixos;
     parcelaAtiva = doMes
         .where((item) => item.isParcelado)
         .fold(

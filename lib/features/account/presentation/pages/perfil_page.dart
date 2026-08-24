@@ -2,6 +2,7 @@ import 'package:finance/features/transactions/presentation/controllers/transacao
 import 'package:finance/features/account/presentation/controllers/usuario_controller.dart';
 import 'package:finance/core/theme/app_theme.dart';
 import 'package:finance/features/account/data/models/usuario_model.dart';
+import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -80,6 +81,32 @@ class PerfilPage extends StatelessWidget {
                   icon: Icon(Icons.add, color: AppTheme.primaryColor, size: 18),
                   label: Text(
                     'Adicionar cartão',
+                    style: TextStyle(color: AppTheme.primaryColor),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 24),
+              _buildSection('Gastos Fixos', [
+                if (transacaoController.gastosFixos.isEmpty)
+                  Text(
+                    'Nenhum gasto fixo cadastrado ainda.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  )
+                else
+                  ...transacaoController.gastosFixos.map(_buildGastoFixoItem),
+                TextButton.icon(
+                  onPressed: () =>
+                      _abrirFormularioGastoFixo(context, transacaoController),
+                  icon: Icon(Icons.add, color: AppTheme.primaryColor, size: 18),
+                  label: Text(
+                    'Adicionar gasto fixo',
                     style: TextStyle(color: AppTheme.primaryColor),
                   ),
                   style: TextButton.styleFrom(
@@ -457,6 +484,87 @@ class PerfilPage extends StatelessWidget {
     );
   }
 
+  Future<void> _abrirFormularioGastoFixo(
+    BuildContext context,
+    TransacaoController controller,
+  ) async {
+    final descricaoController = TextEditingController();
+    final valorController = TextEditingController();
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: AppTheme.surfaceColor,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Adicionar gasto fixo',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: descricaoController,
+                decoration: const InputDecoration(
+                  labelText: 'Descrição (ex: Aluguel)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: valorController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Valor mensal',
+                  prefixText: 'R\$ ',
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final valor = converterValorMonetario(valorController.text);
+                    if (descricaoController.text.trim().isEmpty || valor <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Informe a descrição e um valor válido.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    await controller.adicionarGastoFixo(
+                      descricao: descricaoController.text.trim(),
+                      valor: valor,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: const Text('Salvar gasto fixo'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    descricaoController.dispose();
+    valorController.dispose();
+  }
+
   Widget _buildSection(String title, List<Widget> children) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -516,6 +624,28 @@ class PerfilPage extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGastoFixoItem(GastoFixoModel gasto) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(Icons.repeat, color: AppTheme.primaryColor, size: 20),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              gasto.descricao,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
+          Text(
+            _formatarMoeda(gasto.valor),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
         ],
       ),
     );
