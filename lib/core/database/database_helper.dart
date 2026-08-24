@@ -5,12 +5,14 @@ import 'package:path/path.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static Future<Database>? _openingDatabase;
 
   DatabaseHelper._init();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('meu_controle.db');
+    _openingDatabase ??= _initDB('meu_controle.db');
+    _database = await _openingDatabase!;
     return _database!;
   }
 
@@ -20,30 +22,26 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.delete(
-            'cartoes',
-            where: 'id IN (?, ?)',
-            whereArgs: ['1', '2'],
-          );
-        }
-      },
+      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+      onUpgrade: _upgradeDB,
     );
   }
 
-  // Criação das tabelas baseadas exatamente nos seus modelos visuais
-  Future _createDB(Database db, int version) async {
-    // 1. Tabela de Cartões (Alimenta a tela de Perfil e o seletor da tela Lançar)
+  Future<void> _createDB(Database db, int version) async {
+    await _createUsersTable(db);
+    await _createUserSettingsTable(db);
+
     await db.execute('''
       CREATE TABLE cartoes (
         id TEXT PRIMARY KEY,
+        user_id TEXT,
         nome TEXT NOT NULL,
         finalNumero TEXT NOT NULL,
         bandeira TEXT NOT NULL,
-        isFamiliar INTEGER NOT NULL
+        isFamiliar INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES usuarios (id) ON DELETE CASCADE
       )
     ''');
 
@@ -51,6 +49,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE transacoes (
         id TEXT PRIMARY KEY,
+        user_id TEXT,
         descricao TEXT NOT NULL,
         valorTotal REAL NOT NULL,
         metodoPagamento TEXT NOT NULL,
@@ -60,7 +59,71 @@ class DatabaseHelper {
         totalParcelas INTEGER NOT NULL,
         valorParcela REAL NOT NULL,
         categoria TEXT NOT NULL,
-        data TEXT NOT NULL
+        data TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES usuarios (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE gastos_fixos (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        valor REAL NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.delete('cartoes', where: 'id IN (?, ?)', whereArgs: ['1', '2']);
+    }
+    if (oldVersion < 3) {
+      await _createUsersTable(db);
+      await _createUserSettingsTable(db);
+      await db.execute('ALTER TABLE cartoes ADD COLUMN user_id TEXT');
+      await db.execute('ALTER TABLE transacoes ADD COLUMN user_id TEXT');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS gastos_fixos (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          descricao TEXT NOT NULL,
+          valor REAL NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_cartoes_user_id ON cartoes(user_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_transacoes_user_id ON transacoes(user_id)',
+      );
+    }
+  }
+
+  Future<void> _createUsersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        senha_hash TEXT NOT NULL,
+        sessao_ativa INTEGER NOT NULL DEFAULT 0,
+        criado_em TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createUserSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS configuracoes_usuario (
+        usuario_id TEXT NOT NULL,
+        chave TEXT NOT NULL,
+        valor TEXT NOT NULL,
+        PRIMARY KEY (usuario_id, chave),
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
       )
     ''');
   }
