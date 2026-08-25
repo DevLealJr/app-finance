@@ -1,11 +1,9 @@
 // lib/controllers/transacao_controller.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:finance/features/transactions/data/models/transacao_model.dart';
 import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
 import 'package:finance/features/transactions/data/repositories/transacao_repository.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:finance/features/account/data/repositories/usuario_repository.dart';
 
 double calcularValorDaParcela(double valorTotal, int totalParcelas) {
   if (totalParcelas < 1) {
@@ -48,8 +46,8 @@ class TransacaoController extends ChangeNotifier {
   int mesAtualFiltro = DateTime.now().month;
   int anoAtualFiltro = DateTime.now().year;
 
-  // Repository em memória. O SQLite será conectado em uma etapa posterior.
   final TransacaoRepository _repository = TransacaoRepository();
+  final UsuarioRepository _usuarioRepository = UsuarioRepository();
 
   TransacaoController() {
     // CORREÇÃO AQUI: Chamamos a função de inicialização com segurança
@@ -65,39 +63,37 @@ class TransacaoController extends ChangeNotifier {
   }
 
   Future<void> _carregarGastosFixos() async {
-    final prefs = await SharedPreferences.getInstance();
-    final salvos = prefs.getStringList('gastos_fixos') ?? [];
-    gastosFixos = salvos
-        .map(
-          (item) =>
-              GastoFixoModel.fromMap(jsonDecode(item) as Map<String, dynamic>),
-        )
-        .toList();
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    gastosFixos = await _repository.listarGastosFixos(
+      usuarioId: usuario['id']! as String,
+    );
   }
 
   Future<void> adicionarGastoFixo({
     required String descricao,
     required double valor,
   }) async {
-    gastosFixos = [
-      ...gastosFixos,
-      GastoFixoModel(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        descricao: descricao,
-        valor: valor,
-      ),
-    ];
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      'gastos_fixos',
-      gastosFixos.map((gasto) => jsonEncode(gasto.toMap())).toList(),
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    final gasto = GastoFixoModel(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      descricao: descricao,
+      valor: valor,
     );
+    await _repository.salvarGastoFixo(
+      gasto,
+      usuarioId: usuario['id']! as String,
+    );
+    gastosFixos = [...gastosFixos, gasto];
     await atualizarDashboardEHistorico();
   }
 
   Future<void> atualizarDashboardEHistorico() async {
-    // Busca as transações mantidas pelo repository durante esta execução.
-    final todas = await _repository.listarTodas();
+    final usuario = await _usuarioRepository.usuarioAtual();
+    final todas = usuario == null
+        ? <TransacaoModel>[]
+        : await _repository.listarTodas(usuarioId: usuario['id']! as String);
 
     // Filtra apenas as transações do mês/ano selecionados
     List<TransacaoModel> doMes = todas.where((t) {
@@ -216,7 +212,12 @@ class TransacaoController extends ChangeNotifier {
         data: dataParcela,
       );
     });
-    await _repository.salvarTodas(transacoes);
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.salvarTodas(
+      transacoes,
+      usuarioId: usuario['id']! as String,
+    );
     await atualizarDashboardEHistorico();
     debugPrint(
       '[TRANSACAO] $quantidadeParcelas parcela(s) salvas com sucesso.',
