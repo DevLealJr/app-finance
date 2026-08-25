@@ -22,6 +22,8 @@ class PainelPage extends StatelessWidget {
                 _buildSummaryChart(controller, usuarioController.metaMensal),
                 const SizedBox(height: 32),
                 _buildBalanceSection(controller),
+                const SizedBox(height: 16),
+                _buildPlanningSection(controller, usuarioController.metaMensal),
                 const SizedBox(height: 32),
                 _buildCategoriesSection(controller),
               ],
@@ -227,6 +229,56 @@ class PainelPage extends StatelessWidget {
         _buildBalanceItem('Débito', _formatarMoeda(controller.totalDebito)),
         const SizedBox(width: 12),
         _buildBalanceItem('PIX', _formatarMoeda(controller.totalPix)),
+      ],
+    );
+  }
+
+  Widget _buildPlanningSection(TransacaoController controller, double meta) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            _buildBalanceItem(
+              'Gastos fixos',
+              _formatarMoeda(controller.totalGastosFixos),
+            ),
+            const SizedBox(width: 12),
+            _buildBalanceItem(
+              'Cartão familiar',
+              _formatarMoeda(controller.totalCartaoFamiliar),
+            ),
+          ],
+        ),
+        if (controller.totalAGuardar > 0) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.savings_outlined, color: AppTheme.primaryColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Total a guardar para ${_nomeDoMes(DateTime.now().month % 12 + 1)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  _formatarMoeda(controller.totalAGuardar),
+                  style: TextStyle(
+                    color: AppTheme.primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

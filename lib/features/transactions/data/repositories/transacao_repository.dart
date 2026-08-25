@@ -54,4 +54,40 @@ class TransacaoRepository {
     final db = await _databaseHelper.database;
     await db.insert('gastos_fixos', {...gasto.toMap(), 'user_id': usuarioId});
   }
+
+  Future<void> atualizarGastoFixo(
+    GastoFixoModel gasto, {
+    required String usuarioId,
+  }) async {
+    final db = await _databaseHelper.database;
+    await db.update(
+      'gastos_fixos',
+      gasto.toMap(),
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [gasto.id, usuarioId],
+    );
+  }
+
+  Future<void> excluirGastoFixo(String id, {required String usuarioId}) async {
+    final db = await _databaseHelper.database;
+    await db.delete(
+      'gastos_fixos',
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, usuarioId],
+    );
+  }
+
+  Future<void> atualizarPagamento(
+    String id, {
+    required String usuarioId,
+    required bool pago,
+  }) async {
+    final db = await _databaseHelper.database;
+    await db.update(
+      'transacoes',
+      {'pago': pago ? 1 : 0},
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, usuarioId],
+    );
+  }
 }

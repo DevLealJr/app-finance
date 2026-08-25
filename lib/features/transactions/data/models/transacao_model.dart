@@ -11,6 +11,7 @@ class TransacaoModel {
   final double valorParcela;
   final String categoria;
   final DateTime data;
+  final bool pago;
 
   TransacaoModel({
     required this.id,
@@ -24,6 +25,7 @@ class TransacaoModel {
     required this.valorParcela,
     required this.categoria,
     required this.data,
+    this.pago = false,
   });
 
   // Converte o Objeto Dart para um Mapa que o SQLite entende
@@ -42,6 +44,7 @@ class TransacaoModel {
       'valorParcela': valorParcela,
       'categoria': categoria,
       'data': data.toIso8601String(), // Transforma Data em Texto
+      'pago': pago ? 1 : 0,
     };
   }
 
@@ -59,6 +62,7 @@ class TransacaoModel {
       valorParcela: map['valorParcela'],
       categoria: map['categoria'],
       data: DateTime.parse(map['data']),
+      pago: map['pago'] == 1,
     );
   }
 }
