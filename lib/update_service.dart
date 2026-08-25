@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_app_installer/flutter_app_installer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -35,7 +35,7 @@ class UpdateService {
       }
     } catch (e) {
       // Trate erros de conexão ou permissão se necessário
-      print('Erro ao verificar atualização: $e');
+      debugPrint('Erro ao verificar atualização: $e');
     }
   }
 }
