@@ -11,7 +11,7 @@ class UpdateService {
   static Future<void> checkAndInstallUpdate() async {
     try {
       final dio = Dio();
-      
+
       // 1. Obtém a versão atual do app (definida no pubspec.yaml)
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version; // ex: "1.0.0"
