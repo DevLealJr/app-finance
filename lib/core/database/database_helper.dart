@@ -22,7 +22,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onUpgrade: _upgradeDB,
@@ -60,6 +60,7 @@ class DatabaseHelper {
         valorParcela REAL NOT NULL,
         categoria TEXT NOT NULL,
         data TEXT NOT NULL,
+        pago INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES usuarios (id) ON DELETE CASCADE
       )
     ''');
@@ -98,6 +99,11 @@ class DatabaseHelper {
       );
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_transacoes_user_id ON transacoes(user_id)',
+      );
+    }
+    if (oldVersion < 4) {
+      await db.execute(
+        'ALTER TABLE transacoes ADD COLUMN pago INTEGER NOT NULL DEFAULT 0',
       );
     }
   }

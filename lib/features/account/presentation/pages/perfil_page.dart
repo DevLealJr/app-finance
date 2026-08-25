@@ -100,7 +100,9 @@ class PerfilPage extends StatelessWidget {
                     ),
                   )
                 else
-                  ...transacaoController.gastosFixos.map(_buildGastoFixoItem),
+                  ...transacaoController.gastosFixos.map(
+                    (gasto) => _buildGastoFixoItem(context, gasto),
+                  ),
                 TextButton.icon(
                   onPressed: () =>
                       _abrirFormularioGastoFixo(context, transacaoController),
@@ -121,11 +123,25 @@ class PerfilPage extends StatelessWidget {
                   'Notificações de vencimento',
                   usuarioController.notificacaoVencimento,
                   (val) => usuarioController.alternarNotificacao(val),
+                  subtitle:
+                      'Dia 1 às ${_horario(usuarioController.horarioVencimentoHora, usuarioController.horarioVencimentoMinuto)}',
+                ),
+                _buildNotificationTimeButton(
+                  context,
+                  usuarioController,
+                  diario: false,
                 ),
                 _buildPreferenceToggle(
                   'Lembrete de lançamento diário',
                   usuarioController.lembreteDiario,
                   (val) => usuarioController.alternarLembrete(val),
+                  subtitle:
+                      'Todos os dias às ${_horario(usuarioController.horarioLembreteHora, usuarioController.horarioLembreteMinuto)}',
+                ),
+                _buildNotificationTimeButton(
+                  context,
+                  usuarioController,
+                  diario: true,
                 ),
                 _buildPreferenceToggle(
                   'Modo responsável',
@@ -629,7 +645,7 @@ class PerfilPage extends StatelessWidget {
     );
   }
 
-  Widget _buildGastoFixoItem(GastoFixoModel gasto) {
+  Widget _buildGastoFixoItem(BuildContext context, GastoFixoModel gasto) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -646,9 +662,140 @@ class PerfilPage extends StatelessWidget {
             _formatarMoeda(gasto.valor),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
+          PopupMenuButton<String>(
+            onSelected: (acao) async {
+              if (acao == 'editar') {
+                await _editarGastoFixo(context, gasto);
+              } else if (acao == 'excluir') {
+                await _excluirGastoFixo(context, gasto);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'editar', child: Text('Editar')),
+              PopupMenuItem(value: 'excluir', child: Text('Excluir')),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  String _horario(int hora, int minuto) =>
+      '${hora.toString().padLeft(2, '0')}:${minuto.toString().padLeft(2, '0')}';
+
+  Widget _buildNotificationTimeButton(
+    BuildContext context,
+    UsuarioController controller, {
+    required bool diario,
+  }) {
+    final hora = diario
+        ? controller.horarioLembreteHora
+        : controller.horarioVencimentoHora;
+    final minuto = diario
+        ? controller.horarioLembreteMinuto
+        : controller.horarioVencimentoMinuto;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton.icon(
+        onPressed: () async {
+          final selecionado = await showTimePicker(
+            context: context,
+            initialTime: TimeOfDay(hour: hora, minute: minuto),
+          );
+          if (selecionado != null) {
+            await controller.definirHorariosNotificacao(
+              diario: diario,
+              hora: selecionado.hour,
+              minuto: selecionado.minute,
+            );
+          }
+        },
+        icon: const Icon(Icons.schedule, size: 16),
+        label: Text('Alterar horário: ${_horario(hora, minuto)}'),
+      ),
+    );
+  }
+
+  Future<void> _editarGastoFixo(
+    BuildContext context,
+    GastoFixoModel gasto,
+  ) async {
+    final descricao = TextEditingController(text: gasto.descricao);
+    final valor = TextEditingController(text: gasto.valor.toStringAsFixed(2));
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Editar gasto fixo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: descricao,
+              decoration: const InputDecoration(labelText: 'Descrição'),
+            ),
+            TextField(
+              controller: valor,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Valor mensal',
+                prefixText: 'R\$ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final novoValor = converterValorMonetario(valor.text);
+              if (descricao.text.trim().isEmpty || novoValor <= 0) return;
+              await context.read<TransacaoController>().editarGastoFixo(
+                GastoFixoModel(
+                  id: gasto.id,
+                  descricao: descricao.text.trim(),
+                  valor: novoValor,
+                ),
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    descricao.dispose();
+    valor.dispose();
+  }
+
+  Future<void> _excluirGastoFixo(
+    BuildContext context,
+    GastoFixoModel gasto,
+  ) async {
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir gasto fixo?'),
+        content: Text('Remover ${gasto.descricao} dos gastos mensais?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmou == true && context.mounted) {
+      await context.read<TransacaoController>().excluirGastoFixo(gasto.id);
+    }
   }
 
   Widget _buildPreferenceToggle(

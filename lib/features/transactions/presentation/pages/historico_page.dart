@@ -104,12 +104,20 @@ class HistoricoPage extends StatelessWidget {
                       : ListView(
                           children: controller.transacoesFiltradas
                               .map(
-                                (transacao) => _buildTransactionItem(
-                                  transacao.descricao,
-                                  '${_formatarData(transacao.data)} • ${transacao.metodoPagamento} • ${transacao.parcelaAtual}/${transacao.totalParcelas}',
-                                  '-R\$ ${transacao.valorParcela.toStringAsFixed(2).replaceAll('.', ',')}',
-                                  Icons.category,
-                                  AppTheme.primaryColor,
+                                (transacao) => GestureDetector(
+                                  onLongPress: () => controller.marcarComoPago(
+                                    transacao,
+                                    !transacao.pago,
+                                  ),
+                                  child: _buildTransactionItem(
+                                    transacao.descricao,
+                                    '${_formatarData(transacao.data)} • ${transacao.metodoPagamento} • ${transacao.parcelaAtual}/${transacao.totalParcelas} • ${transacao.pago ? 'Pago' : 'Em aberto'}',
+                                    '-R\$ ${transacao.valorParcela.toStringAsFixed(2).replaceAll('.', ',')}',
+                                    Icons.category,
+                                    transacao.pago
+                                        ? Colors.green
+                                        : AppTheme.primaryColor,
+                                  ),
                                 ),
                               )
                               .toList(),

@@ -6,6 +6,7 @@ import 'package:finance/features/account/data/repositories/cartao_repository.dar
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:finance/features/account/data/repositories/usuario_repository.dart';
+import 'package:finance/core/notifications/notification_service.dart';
 
 class UsuarioController extends ChangeNotifier {
   // Dados de estado que a tela vai ler
@@ -14,6 +15,10 @@ class UsuarioController extends ChangeNotifier {
   bool notificacaoVencimento = true;
   bool lembreteDiario = false;
   bool modoResponsavel = true;
+  int horarioLembreteHora = 20;
+  int horarioLembreteMinuto = 0;
+  int horarioVencimentoHora = 9;
+  int horarioVencimentoMinuto = 0;
   double metaMensal = 0.0;
 
   // --- Autenticação local ---
@@ -57,6 +62,7 @@ class UsuarioController extends ChangeNotifier {
           _usuarioId!,
         );
         _aplicarConfiguracoes(configuracoes);
+        await _sincronizarNotificacoes();
         isLoggedIn = usuario != null || primeiroUsuario['sessao_ativa'] == 1;
       }
       contaCriada = await _usuarioRepository.existeConta();
@@ -110,6 +116,45 @@ class UsuarioController extends ChangeNotifier {
     lembreteDiario = configuracoes['pref_lembrete'] == 'true';
     modoResponsavel = configuracoes['pref_responsavel'] != 'false';
     metaMensal = double.tryParse(configuracoes['meta_mensal'] ?? '') ?? 5000;
+    horarioLembreteHora =
+        int.tryParse(configuracoes['hora_lembrete'] ?? '') ?? 20;
+    horarioLembreteMinuto =
+        int.tryParse(configuracoes['min_lembrete'] ?? '') ?? 0;
+    horarioVencimentoHora =
+        int.tryParse(configuracoes['hora_vencimento'] ?? '') ?? 9;
+    horarioVencimentoMinuto =
+        int.tryParse(configuracoes['min_vencimento'] ?? '') ?? 0;
+  }
+
+  Future<void> _sincronizarNotificacoes() {
+    return NotificationService.instance.synchronize(
+      dueDateEnabled: notificacaoVencimento,
+      dailyReminderEnabled: lembreteDiario,
+      dailyHour: horarioLembreteHora,
+      dailyMinute: horarioLembreteMinuto,
+      monthlyHour: horarioVencimentoHora,
+      monthlyMinute: horarioVencimentoMinuto,
+    );
+  }
+
+  Future<void> definirHorariosNotificacao({
+    required bool diario,
+    required int hora,
+    required int minuto,
+  }) async {
+    if (diario) {
+      horarioLembreteHora = hora;
+      horarioLembreteMinuto = minuto;
+      await _salvarConfiguracao('hora_lembrete', '$hora');
+      await _salvarConfiguracao('min_lembrete', '$minuto');
+    } else {
+      horarioVencimentoHora = hora;
+      horarioVencimentoMinuto = minuto;
+      await _salvarConfiguracao('hora_vencimento', '$hora');
+      await _salvarConfiguracao('min_vencimento', '$minuto');
+    }
+    await _sincronizarNotificacoes();
+    notifyListeners();
   }
 
   Future<void> _salvarConfiguracao(String chave, String valor) async {
@@ -188,6 +233,7 @@ class UsuarioController extends ChangeNotifier {
     notifyListeners(); // Atualiza a tela imediatamente para o usuário ver o switch mudar
 
     await _salvarConfiguracao('pref_vencimento', valor.toString());
+    await _sincronizarNotificacoes();
   }
 
   // 5. FUNÇÃO QUE SALVA A ALTERAÇÃO DO SWITCH DE LEMBRETE
@@ -196,6 +242,7 @@ class UsuarioController extends ChangeNotifier {
     notifyListeners();
 
     await _salvarConfiguracao('pref_lembrete', valor.toString());
+    await _sincronizarNotificacoes();
   }
 
   // 6. FUNÇÃO QUE SALVA A ALTERAÇÃO DO SWITCH DE MODO RESPONSÁVEL

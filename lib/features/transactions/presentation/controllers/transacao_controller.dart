@@ -39,6 +39,10 @@ class TransacaoController extends ChangeNotifier {
   double totalDebito = 0.0;
   double totalPix = 0.0;
   double totalComprometidoFuturo = 0.0;
+  double totalCartaoFamiliar = 0.0;
+  double totalGastosFixos = 0.0;
+  double totalAGuardar = 0.0;
+  double totalPago = 0.0;
   List<GastoFixoModel> gastosFixos = [];
 
   String filtroMetodoAtual = 'Todos';
@@ -58,6 +62,11 @@ class TransacaoController extends ChangeNotifier {
 
   // 2. Garante que o Flutter espere o banco existir na memória antes de ler os dados
   Future<void> _inicializarController() async {
+    await _carregarGastosFixos();
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> recarregarDados() async {
     await _carregarGastosFixos();
     await atualizarDashboardEHistorico();
   }
@@ -109,13 +118,20 @@ class TransacaoController extends ChangeNotifier {
     }
 
     // Cálculos para o painel principal
-    final totalGastosFixos = gastosFixos.fold(
+    totalGastosFixos = gastosFixos.fold(
       0.0,
       (soma, gasto) => soma + gasto.valor,
     );
+    totalPago = doMes
+        .where((item) => item.pago)
+        .fold(0.0, (soma, item) => soma + item.valorParcela);
+    totalCartaoFamiliar = doMes
+        .where((item) => item.isCartaoFamiliar && !item.pago)
+        .fold(0.0, (soma, item) => soma + item.valorParcela);
     totalGastoMes =
         doMes.fold(0.0, (soma, item) => soma + item.valorParcela) +
         totalGastosFixos;
+    totalAGuardar = 0.0;
     totalCredito = doMes
         .where((t) => t.metodoPagamento == 'Crédito')
         .fold(0.0, (s, item) => s + item.valorParcela);
@@ -140,6 +156,8 @@ class TransacaoController extends ChangeNotifier {
           (total, item) => total + item.totalParcelas - item.parcelaAtual,
         )
         .toString();
+    final metaAtual = await _metaAtual();
+    totalAGuardar = totalGastoMes > metaAtual ? totalGastoMes - metaAtual : 0.0;
 
     // Filtros para o Histórico
     if (filtroMetodoAtual == 'Todos') {
@@ -152,6 +170,19 @@ class TransacaoController extends ChangeNotifier {
     }
 
     notifyListeners(); // Notifica a interface visual
+  }
+
+  Future<double> _metaAtual() async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return 5000.0;
+    final configuracoes = await _usuarioRepository.listarConfiguracoes(
+      usuario['id']! as String,
+    );
+    return double.tryParse(
+          configuracoes['meta_mensal_${anoAtualFiltro}_$mesAtualFiltro'] ?? '',
+        ) ??
+        double.tryParse(configuracoes['meta_mensal'] ?? '') ??
+        5000.0;
   }
 
   Future<void> alterarFiltroMetodo(String filtro) async {
@@ -222,6 +253,36 @@ class TransacaoController extends ChangeNotifier {
     debugPrint(
       '[TRANSACAO] $quantidadeParcelas parcela(s) salvas com sucesso.',
     );
+  }
+
+  Future<void> marcarComoPago(TransacaoModel transacao, bool pago) async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.atualizarPagamento(
+      transacao.id,
+      usuarioId: usuario['id']! as String,
+      pago: pago,
+    );
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> editarGastoFixo(GastoFixoModel gasto) async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.atualizarGastoFixo(
+      gasto,
+      usuarioId: usuario['id']! as String,
+    );
+    await _carregarGastosFixos();
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> excluirGastoFixo(String id) async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.excluirGastoFixo(id, usuarioId: usuario['id']! as String);
+    await _carregarGastosFixos();
+    await atualizarDashboardEHistorico();
   }
 
   // ... (mantenha as funções de salvarGastoNoBanco e alterar filtros abaixo)
