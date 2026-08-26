@@ -1,5 +1,6 @@
 import 'package:finance/features/transactions/data/models/transacao_model.dart';
 import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
+import 'package:finance/features/transactions/data/models/recebimento_model.dart';
 import 'package:finance/core/database/database_helper.dart';
 
 class TransacaoRepository {
@@ -86,6 +87,44 @@ class TransacaoRepository {
     await db.update(
       'transacoes',
       {'pago': pago ? 1 : 0},
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, usuarioId],
+    );
+  }
+
+  Future<List<RecebimentoModel>> listarRecebimentos({
+    required String usuarioId,
+  }) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.query(
+      'recebimentos',
+      where: 'user_id = ?',
+      whereArgs: [usuarioId],
+      orderBy: 'data DESC',
+    );
+    return rows.map(RecebimentoModel.fromMap).toList(growable: false);
+  }
+
+  Future<void> salvarRecebimento(
+    RecebimentoModel recebimento, {
+    required String usuarioId,
+  }) async {
+    final db = await _databaseHelper.database;
+    await db.insert('recebimentos', {
+      ...recebimento.toMap(),
+      'user_id': usuarioId,
+    });
+  }
+
+  Future<void> atualizarRecebimento(
+    String id, {
+    required String usuarioId,
+    required bool recebido,
+  }) async {
+    final db = await _databaseHelper.database;
+    await db.update(
+      'recebimentos',
+      {'recebido': recebido ? 1 : 0},
       where: 'id = ? AND user_id = ?',
       whereArgs: [id, usuarioId],
     );

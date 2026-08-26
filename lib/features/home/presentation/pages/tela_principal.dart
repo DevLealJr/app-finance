@@ -1,6 +1,7 @@
 import 'package:finance/features/transactions/presentation/pages/adicionar_despesa_page.dart';
 import 'package:finance/features/transactions/presentation/pages/historico_page.dart';
 import 'package:finance/features/transactions/presentation/pages/painel_page.dart';
+import 'package:finance/features/transactions/presentation/pages/recebimentos_page.dart';
 import 'package:finance/features/account/presentation/pages/perfil_page.dart';
 import 'package:finance/features/home/presentation/widgets/custom_bottom_nav.dart';
 import 'package:finance/features/transactions/presentation/controllers/transacao_controller.dart';
@@ -21,6 +22,7 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
     const PainelPage(),
     const AdicionarDespesaPage(),
     const HistoricoPage(),
+    const RecebimentosPage(),
     const PerfilPage(),
   ];
 

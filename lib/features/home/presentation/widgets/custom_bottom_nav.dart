@@ -47,6 +47,11 @@ class CustomBottomNavBar extends StatelessWidget {
             label: 'Historico',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.payments_outlined),
+            activeIcon: Icon(Icons.payments),
+            label: 'Recebimentos',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             activeIcon: Icon(Icons.person),
             label: 'Perfil',

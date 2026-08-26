@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:finance/features/transactions/data/models/transacao_model.dart';
 import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
+import 'package:finance/features/transactions/data/models/recebimento_model.dart';
 import 'package:finance/features/transactions/data/repositories/transacao_repository.dart';
 import 'package:finance/features/account/data/repositories/usuario_repository.dart';
 import 'package:finance/core/money/money.dart';
@@ -75,6 +76,9 @@ class TransacaoController extends ChangeNotifier {
   Map<String, double> totaisPorCartao = {};
   Map<String, double> totaisPorCategoria = {};
   List<GastoFixoModel> gastosFixos = [];
+  List<RecebimentoModel> recebimentos = [];
+  double totalRecebidoMes = 0.0;
+  double totalEmAbertoMes = 0.0;
 
   String filtroMetodoAtual = 'Todos';
   String filtroPeriodoAtual = 'Mês';
@@ -95,6 +99,7 @@ class TransacaoController extends ChangeNotifier {
   Future<void> _inicializarController() async {
     try {
       await _carregarGastosFixos();
+      await _carregarRecebimentos();
       await atualizarDashboardEHistorico();
     } catch (erro, stackTrace) {
       debugPrint('[TRANSACAO][ERRO] Falha ao carregar dados: $erro');
@@ -104,6 +109,7 @@ class TransacaoController extends ChangeNotifier {
 
   Future<void> recarregarDados() async {
     await _carregarGastosFixos();
+    await _carregarRecebimentos();
     await atualizarDashboardEHistorico();
   }
 
@@ -111,6 +117,14 @@ class TransacaoController extends ChangeNotifier {
     final usuario = await _usuarioRepository.usuarioAtual();
     if (usuario == null) return;
     gastosFixos = await _repository.listarGastosFixos(
+      usuarioId: usuario['id']! as String,
+    );
+  }
+
+  Future<void> _carregarRecebimentos() async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    recebimentos = await _repository.listarRecebimentos(
       usuarioId: usuario['id']! as String,
     );
   }
@@ -167,6 +181,16 @@ class TransacaoController extends ChangeNotifier {
         .where((item) => item.isCartaoFamiliar && !item.pago)
         .fold(0.0, (soma, item) => soma + item.valorParcela);
     totalAReceber = totalCartaoFamiliar;
+    final recebimentosDoMes = recebimentos.where(
+      (item) => item.data.month == mesAtualFiltro && item.data.year == anoAtualFiltro,
+    );
+    totalRecebidoMes = recebimentosDoMes
+      .where((item) => item.recebido)
+      .fold(0.0, (soma, item) => soma + item.valor);
+    totalEmAbertoMes = recebimentosDoMes
+      .where((item) => !item.recebido)
+      .fold(0.0, (soma, item) => soma + item.valor);
+    totalAReceber += totalEmAbertoMes;
     totaisPorCartao = agruparValoresPorCartao(doMes);
     totaisPorCategoria = agruparValoresPorCategoria(doMes);
     totalGastoMes =
@@ -309,6 +333,45 @@ class TransacaoController extends ChangeNotifier {
       usuarioId: usuario['id']! as String,
       pago: pago,
     );
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> adicionarRecebimento({
+    required String descricao,
+    required double valor,
+    required String categoria,
+    required DateTime data,
+    required bool recebido,
+  }) async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.salvarRecebimento(
+      RecebimentoModel(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        descricao: descricao,
+        valor: valor,
+        categoria: categoria,
+        data: data,
+        recebido: recebido,
+      ),
+      usuarioId: usuario['id']! as String,
+    );
+    await _carregarRecebimentos();
+    await atualizarDashboardEHistorico();
+  }
+
+  Future<void> marcarRecebimento(
+    RecebimentoModel recebimento,
+    bool recebido,
+  ) async {
+    final usuario = await _usuarioRepository.usuarioAtual();
+    if (usuario == null) return;
+    await _repository.atualizarRecebimento(
+      recebimento.id,
+      usuarioId: usuario['id']! as String,
+      recebido: recebido,
+    );
+    await _carregarRecebimentos();
     await atualizarDashboardEHistorico();
   }
 

@@ -27,7 +27,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onUpgrade: _upgradeDB,
@@ -80,6 +80,8 @@ class DatabaseHelper {
         FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
       )
     ''');
+
+    await _createRecebimentosTable(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -170,6 +172,27 @@ class DatabaseHelper {
         'CREATE INDEX IF NOT EXISTS idx_transacoes_cartao_id ON transacoes(cartao_id)',
       );
     }
+    if (oldVersion < 7) {
+      await _createRecebimentosTable(db);
+    }
+  }
+
+  Future<void> _createRecebimentosTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS recebimentos (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        valor INTEGER NOT NULL,
+        categoria TEXT NOT NULL,
+        data TEXT NOT NULL,
+        recebido INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_recebimentos_user_id ON recebimentos(user_id)',
+    );
   }
 
   Future<void> _createUsersTable(Database db) async {
