@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:finance/features/account/data/models/usuario_model.dart';
@@ -7,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:finance/features/account/data/repositories/usuario_repository.dart';
 import 'package:finance/core/notifications/notification_service.dart';
+import 'package:finance/features/transactions/data/repositories/transacao_repository.dart';
 
 class UsuarioController extends ChangeNotifier {
   // Dados de estado que a tela vai ler
@@ -40,6 +43,7 @@ class UsuarioController extends ChangeNotifier {
   // Lista de cartões mantida em memória enquanto o banco ainda não foi integrado.
   List<CartaoModel> cartoes = [];
   final CartaoRepository _cartaoRepository = CartaoRepository();
+  final TransacaoRepository _transacaoRepository = TransacaoRepository();
 
   // O construtor chama automaticamente a leitura do banco local ao ser iniciado
   final UsuarioRepository _usuarioRepository = UsuarioRepository();
@@ -49,7 +53,64 @@ class UsuarioController extends ChangeNotifier {
   }
 
   String _hash(String senha) {
-    return sha256.convert(utf8.encode(senha)).toString();
+    const iteracoes = 120000;
+    final salt = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    final derivado = _pbkdf2(utf8.encode(senha), salt, iteracoes);
+    return 'pbkdf2-sha256\$$iteracoes\$${base64UrlEncode(salt)}\$${base64UrlEncode(derivado)}';
+  }
+
+  List<int> _pbkdf2(
+    List<int> senha,
+    List<int> salt,
+    int iteracoes, {
+    int tamanho = 32,
+  }) {
+    final hmac = Hmac(sha256, senha);
+    final blocos = <int>[];
+    for (var indiceBloco = 1; blocos.length < tamanho; indiceBloco++) {
+      final entrada = <int>[...salt, ..._int32Bytes(indiceBloco)];
+      var u = hmac.convert(entrada).bytes;
+      final bloco = Uint8List.fromList(u);
+      for (var indice = 1; indice < iteracoes; indice++) {
+        u = hmac.convert(u).bytes;
+        for (var byte = 0; byte < bloco.length; byte++) {
+          bloco[byte] ^= u[byte];
+        }
+      }
+      blocos.addAll(bloco);
+    }
+    return blocos.sublist(0, tamanho);
+  }
+
+  List<int> _int32Bytes(int valor) => [
+    (valor >> 24) & 0xff,
+    (valor >> 16) & 0xff,
+    (valor >> 8) & 0xff,
+    valor & 0xff,
+  ];
+
+  bool _verificarSenha(String senha, String armazenado) {
+    if (!armazenado.startsWith('pbkdf2-sha256\$')) {
+      return sha256.convert(utf8.encode(senha)).toString() == armazenado;
+    }
+    final partes = armazenado.split('\$');
+    if (partes.length != 4) return false;
+    final iteracoes = int.tryParse(partes[1]);
+    if (iteracoes == null || iteracoes < 100000) return false;
+    final salt = base64Url.decode(partes[2]);
+    final esperado = base64Url.decode(partes[3]);
+    final recebido = _pbkdf2(
+      utf8.encode(senha),
+      salt,
+      iteracoes,
+      tamanho: esperado.length,
+    );
+    if (recebido.length != esperado.length) return false;
+    var diferenca = 0;
+    for (var indice = 0; indice < esperado.length; indice++) {
+      diferenca |= recebido[indice] ^ esperado[indice];
+    }
+    return diferenca == 0;
   }
 
   Future<void> _inicializar() async {
@@ -62,6 +123,7 @@ class UsuarioController extends ChangeNotifier {
           _usuarioId!,
         );
         _aplicarConfiguracoes(configuracoes);
+        await carregarMetaDoPeriodo(DateTime.now().month, DateTime.now().year);
         await _sincronizarNotificacoes();
         isLoggedIn = usuario != null || primeiroUsuario['sessao_ativa'] == 1;
       }
@@ -170,6 +232,9 @@ class UsuarioController extends ChangeNotifier {
     required String senha,
   }) async {
     debugPrint('[AUTH] Cadastrando usuário: ${email.trim()}');
+    if (await _usuarioRepository.buscarPorEmail(email) != null) {
+      throw StateError('Já existe uma conta com este e-mail.');
+    }
     this.nome = nome.trim();
     this.email = email.trim();
     _senhaHash = _hash(senha);
@@ -202,12 +267,17 @@ class UsuarioController extends ChangeNotifier {
   Future<bool> login({required String email, required String senha}) async {
     debugPrint('[AUTH] Tentativa de login: ${email.trim()}');
     final usuario = await _usuarioRepository.buscarPorEmail(email);
-    if (usuario == null || _hash(senha) != usuario['senha_hash']) {
+    if (usuario == null ||
+        !_verificarSenha(senha, usuario['senha_hash']! as String)) {
       debugPrint('[AUTH] Login recusado: credenciais inválidas.');
       return false;
     }
 
     _aplicarUsuario(usuario);
+    if (!usuario['senha_hash']!.toString().startsWith('pbkdf2-sha256\$')) {
+      _senhaHash = _hash(senha);
+      await _usuarioRepository.atualizarSenha(_usuarioId!, _senhaHash);
+    }
     await _usuarioRepository.ativarSessao(_usuarioId!);
     _aplicarConfiguracoes(
       await _usuarioRepository.listarConfiguracoes(_usuarioId!),
@@ -219,10 +289,16 @@ class UsuarioController extends ChangeNotifier {
     return true;
   }
 
-  Future<void> redefinirSenha(String novaSenha) async {
+  Future<void> redefinirSenha(String novaSenha, {String? email}) async {
     debugPrint('[AUTH] Iniciando redefinição de senha.');
     _senhaHash = _hash(novaSenha);
-    if (_usuarioId == null) return;
+    if (_usuarioId == null && email != null) {
+      final usuario = await _usuarioRepository.buscarPorEmail(email);
+      if (usuario != null) _usuarioId = usuario['id']! as String;
+    }
+    if (_usuarioId == null) {
+      throw StateError('Usuário não encontrado.');
+    }
     await _usuarioRepository.atualizarSenha(_usuarioId!, _senhaHash);
     debugPrint('[AUTH] Senha redefinida com sucesso.');
   }
@@ -266,12 +342,47 @@ class UsuarioController extends ChangeNotifier {
       final configuracoes = await _usuarioRepository.listarConfiguracoes(
         _usuarioId!,
       );
-      metaMensal =
-          double.tryParse(configuracoes['meta_mensal_${ano}_$mes'] ?? '') ??
-          double.tryParse(configuracoes['meta_mensal'] ?? '') ??
-          5000.0;
+      final chave = 'meta_mensal_${ano}_$mes';
+      final metaSalva = configuracoes[chave];
+      metaMensal = metaSalva == null
+          ? await gerarMetaAutomatica(mes: mes, ano: ano)
+          : double.tryParse(metaSalva) ?? 5000.0;
     }
     notifyListeners();
+  }
+
+  Future<double> gerarMetaAutomatica({
+    required int mes,
+    required int ano,
+  }) async {
+    if (_usuarioId == null) return 5000.0;
+    final transacoes = await _transacaoRepository.listarTodas(
+      usuarioId: _usuarioId!,
+    );
+    final ultimosMeses = <double>[];
+    for (var deslocamento = 1; deslocamento <= 3; deslocamento++) {
+      final referencia = DateTime(ano, mes - deslocamento);
+      final total = transacoes
+          .where(
+            (transacao) =>
+                transacao.data.year == referencia.year &&
+                transacao.data.month == referencia.month,
+          )
+          .fold(0.0, (soma, transacao) => soma + transacao.valorParcela);
+      if (total > 0) ultimosMeses.add(total);
+    }
+    if (ultimosMeses.isEmpty) {
+      final configuracoes = await _usuarioRepository.listarConfiguracoes(
+        _usuarioId!,
+      );
+      return double.tryParse(configuracoes['meta_mensal'] ?? '') ?? 5000.0;
+    }
+    final meta = ultimosMeses.reduce((a, b) => a + b) / ultimosMeses.length;
+    await _salvarConfiguracao(
+      'meta_mensal_${ano}_$mes',
+      meta.toStringAsFixed(2),
+    );
+    return meta;
   }
 
   Future<void> salvarMetaDoPeriodo({

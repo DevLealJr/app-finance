@@ -11,9 +11,14 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _openingDatabase ??= _initDB('meu_controle.db');
-    _database = await _openingDatabase!;
-    return _database!;
+    final opening = _openingDatabase ??= _initDB('meu_controle.db');
+    try {
+      _database = await opening;
+      return _database!;
+    } catch (_) {
+      if (identical(_openingDatabase, opening)) _openingDatabase = null;
+      rethrow;
+    }
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -22,7 +27,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: _createDB,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onUpgrade: _upgradeDB,
@@ -51,13 +56,14 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         user_id TEXT,
         descricao TEXT NOT NULL,
-        valorTotal REAL NOT NULL,
+        valorTotal INTEGER NOT NULL,
         metodoPagamento TEXT NOT NULL,
+        cartao_id TEXT,
         isCartaoFamiliar INTEGER NOT NULL,
         isParcelado INTEGER NOT NULL,
         parcelaAtual INTEGER NOT NULL,
         totalParcelas INTEGER NOT NULL,
-        valorParcela REAL NOT NULL,
+        valorParcela INTEGER NOT NULL,
         categoria TEXT NOT NULL,
         data TEXT NOT NULL,
         pago INTEGER NOT NULL DEFAULT 0,
@@ -70,7 +76,7 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
         descricao TEXT NOT NULL,
-        valor REAL NOT NULL,
+        valor INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
       )
     ''');
@@ -104,6 +110,64 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       await db.execute(
         'ALTER TABLE transacoes ADD COLUMN pago INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE transacoes_centavos (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          descricao TEXT NOT NULL,
+          valorTotal INTEGER NOT NULL,
+          metodoPagamento TEXT NOT NULL,
+          isCartaoFamiliar INTEGER NOT NULL,
+          isParcelado INTEGER NOT NULL,
+          parcelaAtual INTEGER NOT NULL,
+          totalParcelas INTEGER NOT NULL,
+          valorParcela INTEGER NOT NULL,
+          categoria TEXT NOT NULL,
+          data TEXT NOT NULL,
+          pago INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (user_id) REFERENCES usuarios (id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('''
+        INSERT INTO transacoes_centavos
+        SELECT id, user_id, descricao,
+          CAST(ROUND(valorTotal * 100) AS INTEGER), metodoPagamento,
+          isCartaoFamiliar, isParcelado, parcelaAtual, totalParcelas,
+          CAST(ROUND(valorParcela * 100) AS INTEGER), categoria, data, pago
+        FROM transacoes
+      ''');
+      await db.execute('DROP TABLE transacoes');
+      await db.execute('ALTER TABLE transacoes_centavos RENAME TO transacoes');
+      await db.execute('ALTER TABLE gastos_fixos RENAME TO gastos_fixos_reais');
+      await db.execute('''
+        CREATE TABLE gastos_fixos (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          descricao TEXT NOT NULL,
+          valor INTEGER NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('''
+        INSERT INTO gastos_fixos
+        SELECT id, user_id, descricao, CAST(ROUND(valor * 100) AS INTEGER)
+        FROM gastos_fixos_reais
+      ''');
+      await db.execute('DROP TABLE gastos_fixos_reais');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_cartoes_user_id ON cartoes(user_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_transacoes_user_id ON transacoes(user_id)',
+      );
+    }
+    if (oldVersion < 6) {
+      await db.execute('ALTER TABLE transacoes ADD COLUMN cartao_id TEXT');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_transacoes_cartao_id ON transacoes(cartao_id)',
       );
     }
   }

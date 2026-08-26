@@ -104,19 +104,17 @@ class HistoricoPage extends StatelessWidget {
                       : ListView(
                           children: controller.transacoesFiltradas
                               .map(
-                                (transacao) => GestureDetector(
-                                  onLongPress: () => controller.marcarComoPago(
+                                (transacao) => _buildTransactionItem(
+                                  transacao.descricao,
+                                  '${_formatarData(transacao.data)} • ${transacao.metodoPagamento} • ${transacao.parcelaAtual}/${transacao.totalParcelas} • ${transacao.isCartaoFamiliar ? (transacao.pago ? 'Recebido' : 'A receber') : (transacao.pago ? 'Pago' : 'Em aberto')}',
+                                  '-R\$ ${transacao.valorParcela.toStringAsFixed(2).replaceAll('.', ',')}',
+                                  Icons.category,
+                                  transacao.pago
+                                      ? Colors.green
+                                      : AppTheme.primaryColor,
+                                  action: () => controller.marcarComoPago(
                                     transacao,
                                     !transacao.pago,
-                                  ),
-                                  child: _buildTransactionItem(
-                                    transacao.descricao,
-                                    '${_formatarData(transacao.data)} • ${transacao.metodoPagamento} • ${transacao.parcelaAtual}/${transacao.totalParcelas} • ${transacao.pago ? 'Pago' : 'Em aberto'}',
-                                    '-R\$ ${transacao.valorParcela.toStringAsFixed(2).replaceAll('.', ',')}',
-                                    Icons.category,
-                                    transacao.pago
-                                        ? Colors.green
-                                        : AppTheme.primaryColor,
                                   ),
                                 ),
                               )
@@ -187,8 +185,9 @@ class HistoricoPage extends StatelessWidget {
     String subtitle,
     String value,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    required Future<void> Function() action,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -222,7 +221,18 @@ class HistoricoPage extends StatelessWidget {
               ],
             ),
           ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                tooltip: 'Alterar status',
+                icon: Icon(Icons.check_circle_outline, size: 20, color: color),
+                onPressed: action,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
         ],
       ),
     );

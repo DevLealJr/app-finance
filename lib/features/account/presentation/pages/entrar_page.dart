@@ -58,10 +58,14 @@ class _EntrarPageState extends State<EntrarPage> {
       _mensagem = sucesso ? 'Login autorizado.' : null;
     });
 
+    if (sucesso) {
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(Rotas.principal, (route) => false);
+      return;
+    }
+
     if (!sucesso) {
       setState(() => _erro = 'E-mail ou senha incorretos.');
-      // Não precisamos navegar em caso de sucesso: o AuthGate está
-      // observando isLoggedIn no controller e troca de tela sozinho.
     }
   }
 
@@ -138,6 +142,7 @@ class _EntrarPageState extends State<EntrarPage> {
                 try {
                   await context.read<UsuarioController>().redefinirSenha(
                     novaSenha,
+                    email: emailController.text,
                   );
                 } catch (exception, stackTrace) {
                   debugPrint(

@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart' as timezone;
 
@@ -14,6 +15,10 @@ class NotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
+    if (kIsWeb) {
+      _initialized = true;
+      return;
+    }
     timezone_data.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     final ios = DarwinInitializationSettings(
@@ -28,6 +33,7 @@ class NotificationService {
   }
 
   Future<bool> requestPermission() async {
+    if (kIsWeb) return false;
     await initialize();
     final android = _plugin
         .resolvePlatformSpecificImplementation<
@@ -115,7 +121,14 @@ class NotificationService {
       minute,
     );
     if (!next.isAfter(now)) {
-      next = timezone.TZDateTime(timezone.local, now.year, now.month + 1, 1, 9);
+      next = timezone.TZDateTime(
+        timezone.local,
+        now.year,
+        now.month + 1,
+        1,
+        hour,
+        minute,
+      );
     }
     await _plugin.zonedSchedule(
       id: _monthlyId,

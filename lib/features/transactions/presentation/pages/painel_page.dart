@@ -23,7 +23,11 @@ class PainelPage extends StatelessWidget {
                 const SizedBox(height: 32),
                 _buildBalanceSection(controller),
                 const SizedBox(height: 16),
-                _buildPlanningSection(controller, usuarioController.metaMensal),
+                _buildPlanningSection(
+                  controller,
+                  usuarioController,
+                  usuarioController.metaMensal,
+                ),
                 const SizedBox(height: 32),
                 _buildCategoriesSection(controller),
               ],
@@ -233,7 +237,11 @@ class PainelPage extends StatelessWidget {
     );
   }
 
-  Widget _buildPlanningSection(TransacaoController controller, double meta) {
+  Widget _buildPlanningSection(
+    TransacaoController controller,
+    UsuarioController usuarioController,
+    double meta,
+  ) {
     return Column(
       children: [
         Row(
@@ -244,11 +252,15 @@ class PainelPage extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             _buildBalanceItem(
-              'Cartão familiar',
-              _formatarMoeda(controller.totalCartaoFamiliar),
+              'A receber',
+              _formatarMoeda(controller.totalAReceber),
             ),
           ],
         ),
+        if (controller.totaisPorCartao.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildCardTotals(controller, usuarioController),
+        ],
         if (controller.totalAGuardar > 0) ...[
           const SizedBox(height: 12),
           Container(
@@ -264,7 +276,7 @@ class PainelPage extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Total a guardar para ${_nomeDoMes(DateTime.now().month % 12 + 1)}',
+                    'Total a guardar para ${_nomeDoMes(controller.mesAtualFiltro)}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -279,6 +291,41 @@ class PainelPage extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildCardTotals(
+    TransacaoController controller,
+    UsuarioController usuarioController,
+  ) {
+    final cartoesPorId = {
+      for (final cartao in usuarioController.cartoes) cartao.id: cartao,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Total por cartão',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        ...controller.totaisPorCartao.entries.map((entry) {
+          final cartao = cartoesPorId[entry.key];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(cartao?.nome ?? 'Cartão não cadastrado'),
+                Text(
+                  _formatarMoeda(entry.value),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
@@ -324,13 +371,13 @@ class PainelPage extends StatelessWidget {
           mainAxisSpacing: 16,
           crossAxisSpacing: 16,
           childAspectRatio: 1.5,
-          children: controller.transacoesFiltradas.isEmpty
+          children: controller.totaisPorCategoria.isEmpty
               ? [const Text('Nenhum gasto cadastrado neste mês.')]
-              : controller.transacoesFiltradas
+              : controller.totaisPorCategoria.entries
                     .map(
-                      (transacao) => _buildCategoryCard(
-                        transacao.categoria,
-                        _formatarMoeda(transacao.valorParcela),
+                      (entry) => _buildCategoryCard(
+                        entry.key,
+                        _formatarMoeda(entry.value),
                         Icons.category,
                         AppTheme.primaryColor,
                       ),

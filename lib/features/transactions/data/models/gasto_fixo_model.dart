@@ -1,23 +1,27 @@
+import 'package:finance/core/money/money.dart';
+
 class GastoFixoModel {
   final String id;
   final String descricao;
-  final double valor;
+  final int valorCentavos;
 
-  const GastoFixoModel({
+  GastoFixoModel({
     required this.id,
     required this.descricao,
-    required this.valor,
-  });
+    required double valor,
+  }) : valorCentavos = valorEmCentavos(valor);
+
+  double get valor => valorDeCentavos(valorCentavos);
 
   Map<String, dynamic> toMap() {
-    return {'id': id, 'descricao': descricao, 'valor': valor};
+    return {'id': id, 'descricao': descricao, 'valor': valorCentavos};
   }
 
   factory GastoFixoModel.fromMap(Map<String, dynamic> map) {
     return GastoFixoModel(
       id: map['id'] as String,
       descricao: map['descricao'] as String,
-      valor: (map['valor'] as num).toDouble(),
+      valor: valorDeCentavos((map['valor'] as num).round()),
     );
   }
 }

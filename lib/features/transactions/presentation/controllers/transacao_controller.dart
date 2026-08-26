@@ -4,22 +4,20 @@ import 'package:finance/features/transactions/data/models/transacao_model.dart';
 import 'package:finance/features/transactions/data/models/gasto_fixo_model.dart';
 import 'package:finance/features/transactions/data/repositories/transacao_repository.dart';
 import 'package:finance/features/account/data/repositories/usuario_repository.dart';
+import 'package:finance/core/money/money.dart';
 
 double calcularValorDaParcela(double valorTotal, int totalParcelas) {
   if (totalParcelas < 1) {
     throw ArgumentError.value(totalParcelas, 'totalParcelas');
   }
-  return valorTotal / totalParcelas;
+  final totalCentavos = valorEmCentavos(valorTotal);
+  final centavosBase = totalCentavos ~/ totalParcelas;
+  final restoCentavos = totalCentavos % totalParcelas;
+  return valorDeCentavos(centavosBase + (restoCentavos > 0 ? 1 : 0));
 }
 
 double converterValorMonetario(String texto) {
-  final normalizado = texto.trim().replaceAll('R\$', '').replaceAll(' ', '');
-  if (normalizado.isEmpty) return 0.0;
-
-  final valor = normalizado.contains(',')
-      ? normalizado.replaceAll('.', '').replaceAll(',', '.')
-      : normalizado;
-  return double.tryParse(valor) ?? 0.0;
+  return valorDeCentavos(parseCentavos(texto));
 }
 
 DateTime adicionarMeses(DateTime data, int meses) {
@@ -32,6 +30,36 @@ DateTime adicionarMeses(DateTime data, int meses) {
   );
 }
 
+Map<String, double> agruparValoresPorCategoria(
+  Iterable<TransacaoModel> transacoes,
+) {
+  final totais = <String, double>{};
+  for (final transacao in transacoes) {
+    totais.update(
+      transacao.categoria,
+      (total) => total + transacao.valorParcela,
+      ifAbsent: () => transacao.valorParcela,
+    );
+  }
+  return totais;
+}
+
+Map<String, double> agruparValoresPorCartao(
+  Iterable<TransacaoModel> transacoes,
+) {
+  final totais = <String, double>{};
+  for (final transacao in transacoes) {
+    final cartaoId = transacao.cartaoId;
+    if (cartaoId == null) continue;
+    totais.update(
+      cartaoId,
+      (total) => total + transacao.valorParcela,
+      ifAbsent: () => transacao.valorParcela,
+    );
+  }
+  return totais;
+}
+
 class TransacaoController extends ChangeNotifier {
   List<TransacaoModel> transacoesFiltradas = [];
   double totalGastoMes = 0.0;
@@ -40,9 +68,12 @@ class TransacaoController extends ChangeNotifier {
   double totalPix = 0.0;
   double totalComprometidoFuturo = 0.0;
   double totalCartaoFamiliar = 0.0;
+  double totalAReceber = 0.0;
   double totalGastosFixos = 0.0;
   double totalAGuardar = 0.0;
   double totalPago = 0.0;
+  Map<String, double> totaisPorCartao = {};
+  Map<String, double> totaisPorCategoria = {};
   List<GastoFixoModel> gastosFixos = [];
 
   String filtroMetodoAtual = 'Todos';
@@ -62,8 +93,13 @@ class TransacaoController extends ChangeNotifier {
 
   // 2. Garante que o Flutter espere o banco existir na memória antes de ler os dados
   Future<void> _inicializarController() async {
-    await _carregarGastosFixos();
-    await atualizarDashboardEHistorico();
+    try {
+      await _carregarGastosFixos();
+      await atualizarDashboardEHistorico();
+    } catch (erro, stackTrace) {
+      debugPrint('[TRANSACAO][ERRO] Falha ao carregar dados: $erro');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<void> recarregarDados() async {
@@ -114,7 +150,9 @@ class TransacaoController extends ChangeNotifier {
       final inicio = filtroPeriodoAtual == 'Hoje'
           ? DateTime(agora.year, agora.month, agora.day)
           : agora.subtract(const Duration(days: 30));
-      doMes = todas.where((t) => !t.data.isBefore(inicio)).toList();
+      doMes = todas
+          .where((t) => !t.data.isBefore(inicio) && !t.data.isAfter(agora))
+          .toList();
     }
 
     // Cálculos para o painel principal
@@ -128,6 +166,9 @@ class TransacaoController extends ChangeNotifier {
     totalCartaoFamiliar = doMes
         .where((item) => item.isCartaoFamiliar && !item.pago)
         .fold(0.0, (soma, item) => soma + item.valorParcela);
+    totalAReceber = totalCartaoFamiliar;
+    totaisPorCartao = agruparValoresPorCartao(doMes);
+    totaisPorCategoria = agruparValoresPorCategoria(doMes);
     totalGastoMes =
         doMes.fold(0.0, (soma, item) => soma + item.valorParcela) +
         totalGastosFixos;
@@ -213,6 +254,7 @@ class TransacaoController extends ChangeNotifier {
     required String descricao,
     required double valorTotal,
     required String metodoPagamento,
+    String? cartaoId,
     required bool isCartaoFamiliar,
     required bool isParcelado,
     required int totalParcelas,
@@ -226,19 +268,23 @@ class TransacaoController extends ChangeNotifier {
       '[TRANSACAO] Salvando "$descricao": total=$valorTotal, parcelas=$quantidadeParcelas',
     );
     final dataInicial = data ?? DateTime.now();
-    final valorParcela = calcularValorDaParcela(valorTotal, quantidadeParcelas);
+    final totalCentavos = valorEmCentavos(valorTotal);
+    final centavosBase = totalCentavos ~/ quantidadeParcelas;
+    final restoCentavos = totalCentavos % quantidadeParcelas;
     final transacoes = List.generate(quantidadeParcelas, (index) {
       final dataParcela = adicionarMeses(dataInicial, index);
+      final parcelaCentavos = centavosBase + (index < restoCentavos ? 1 : 0);
       return TransacaoModel(
         id: '${DateTime.now().microsecondsSinceEpoch}_$index',
         descricao: descricao,
         valorTotal: valorTotal,
         metodoPagamento: metodoPagamento,
+        cartaoId: cartaoId,
         isCartaoFamiliar: isCartaoFamiliar,
         isParcelado: isParcelado,
         parcelaAtual: index + 1,
         totalParcelas: quantidadeParcelas,
-        valorParcela: valorParcela,
+        valorParcela: valorDeCentavos(parcelaCentavos),
         categoria: categoria,
         data: dataParcela,
       );

@@ -1,8 +1,10 @@
 import 'package:finance/features/transactions/presentation/controllers/transacao_controller.dart';
+import 'package:finance/core/money/money.dart';
 import 'package:finance/core/theme/app_theme.dart';
 import 'package:finance/features/transactions/presentation/widgets/confirmation_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:finance/features/account/presentation/controllers/usuario_controller.dart';
 
 class AdicionarDespesaPage extends StatefulWidget {
   const AdicionarDespesaPage({super.key});
@@ -17,7 +19,20 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
   final TextEditingController _valorController = TextEditingController();
 
   String selectedMethod = 'Crédito'; // Ajustado acento para bater com o banco
+  String selectedCategory = 'Geral';
+  static const categories = [
+    'Geral',
+    'Alimentação',
+    'Transporte',
+    'Moradia',
+    'Saúde',
+    'Lazer',
+    'Educação',
+    'Assinaturas',
+    'Outros',
+  ];
   bool isFamilyCard = false;
+  String? selectedCardId;
   bool isInstallments = false;
   int installmentsCount = 1;
   DateTime dataLancamento = DateTime.now();
@@ -47,7 +62,12 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
     setState(() {
       valorTotalGasto = converterValorMonetario(_valorController.text);
       if (isInstallments && installmentsCount > 0) {
-        valorDaParcelaCalculada = valorTotalGasto / installmentsCount;
+        final totalCentavos = valorEmCentavos(valorTotalGasto);
+        final centavosBase = totalCentavos ~/ installmentsCount;
+        final restoCentavos = totalCentavos % installmentsCount;
+        valorDaParcelaCalculada = valorDeCentavos(
+          centavosBase + (restoCentavos > 0 ? 1 : 0),
+        );
       } else {
         valorDaParcelaCalculada = valorTotalGasto;
       }
@@ -77,10 +97,11 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
         descricao: _descricaoController.text.trim(),
         valorTotal: valorSalvo,
         metodoPagamento: selectedMethod,
+        cartaoId: selectedCardId,
         isCartaoFamiliar: isFamilyCard,
         isParcelado: isInstallments,
         totalParcelas: isInstallments ? installmentsCount : 1,
-        categoria: 'Geral',
+        categoria: selectedCategory,
         data: dataLancamento,
       );
     } catch (erro) {
@@ -200,13 +221,34 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
                 _buildMethodButton('PIX'),
               ],
             ),
+            if (selectedMethod == 'Crédito') ...[
+              const SizedBox(height: 16),
+              _buildCardSelector(),
+            ],
             const SizedBox(height: 24),
-            _buildSwitchTile(
-              'Cartão Familiar',
-              'Cobrar do limite compartilhado',
-              isFamilyCard,
-              (val) => setState(() => isFamilyCard = val),
+            DropdownButtonFormField<String>(
+              initialValue: selectedCategory,
+              decoration: const InputDecoration(labelText: 'Categoria'),
+              items: categories
+                  .map(
+                    (category) => DropdownMenuItem(
+                      value: category,
+                      child: Text(category),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => selectedCategory = value);
+              },
             ),
+            const SizedBox(height: 24),
+            if (selectedMethod == 'Crédito' && selectedCardId != null)
+              Text(
+                isFamilyCard
+                    ? 'Cartão de outra pessoa: este gasto aparecerá em A receber.'
+                    : 'Cartão próprio.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              ),
             const SizedBox(height: 12),
             _buildSwitchTile('Parcelar Gasto?', null, isInstallments, (val) {
               setState(() => isInstallments = val);
@@ -319,7 +361,13 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
     return Expanded(
       child: GestureDetector(
         onTap: () {
-          setState(() => selectedMethod = method);
+          setState(() {
+            selectedMethod = method;
+            if (method != 'Crédito') {
+              selectedCardId = null;
+              isFamilyCard = false;
+            }
+          });
           _atualizarValores();
         },
         child: Container(
@@ -346,6 +394,35 @@ class _AdicionarDespesaPageState extends State<AdicionarDespesaPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCardSelector() {
+    final cartoes = context.watch<UsuarioController>().cartoes;
+    if (cartoes.isEmpty) {
+      return Text(
+        'Cadastre um cartão no perfil para associá-lo a esta compra.',
+        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      initialValue: selectedCardId,
+      decoration: const InputDecoration(labelText: 'Cartão da compra'),
+      items: cartoes
+          .map(
+            (cartao) => DropdownMenuItem(
+              value: cartao.id,
+              child: Text('${cartao.nome} • **** ${cartao.finalNumero}'),
+            ),
+          )
+          .toList(),
+      onChanged: (valor) {
+        final cartao = cartoes.where((item) => item.id == valor).firstOrNull;
+        setState(() {
+          selectedCardId = valor;
+          isFamilyCard = cartao?.isFamiliar ?? false;
+        });
+      },
     );
   }
 

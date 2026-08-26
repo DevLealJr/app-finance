@@ -56,16 +56,26 @@ class _CadastroPageState extends State<CadastroPage> {
 
     setState(() => _salvando = true);
 
-    await context.read<UsuarioController>().cadastrar(
-      nome: nome,
-      email: email,
-      senha: senha,
-    );
+    var cadastroConcluido = false;
+    try {
+      await context.read<UsuarioController>().cadastrar(
+        nome: nome,
+        email: email,
+        senha: senha,
+      );
+      cadastroConcluido = true;
+    } catch (erro) {
+      if (mounted) {
+        setState(() => _erro = erro.toString().replaceFirst('Bad state: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
 
     // O AuthGate (widget raiz) está observando isLoggedIn e já vai trocar
     // sozinho pra MainScreen assim que cadastrar() chamar notifyListeners().
     // Só precisamos fechar esta tela, que foi empilhada por cima dele.
-    if (mounted) Navigator.of(context).pop();
+    if (mounted && cadastroConcluido) Navigator.of(context).pop();
   }
 
   @override
